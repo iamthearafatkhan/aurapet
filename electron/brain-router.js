@@ -1,5 +1,20 @@
+// electron/brain-router.js
+const fs = require('fs');
+const path = require('path');
+const { app } = require('electron');
+
+function getSelectedModel() {
+    try {
+        const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+        const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        return data.model || 'qwen:latest';
+    } catch {
+        return 'qwen:latest';
+    }
+}
+
 async function askBrain(userText, targetPath, petName, userName, chatHistory) {
-    const selectedModel = 'qwen:latest';
+    const selectedModel = getSelectedModel();
 
     let messages = [
         {
@@ -30,7 +45,7 @@ async function askBrain(userText, targetPath, petName, userName, chatHistory) {
                 options: {
                     num_ctx: 8192,
                     num_predict: 4096,
-                    temperature: 0.3 // Lower temperature = more precise coding
+                    temperature: 0.3
                 }
             })
         });

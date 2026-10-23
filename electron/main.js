@@ -1,22 +1,35 @@
-const { app, BrowserWindow, screen, ipcMain, Menu, session, clipboard, shell } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, Menu, session, clipboard, shell, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
 const { ElectronOllama } = require('electron-ollama');
 const { executeAction, getSelectedPath } = require('./action-executor');
-const { uIOhook } = require('uiohook-napi');
 const { askBrain } = require('./brain-router');
 const { startIdleWatcher } = require('./idle-welcome');
 
-let win = null;
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    process.exit(0);
+}
+
+let setupWin = null;
+let petWin = null;
+let chatWin = null;
 let currentPetName = "Miko";
 let currentUserName = "Arafat";
 let chatHistory = [];
-let currentDownloadProcess = null;
-let ollamaInstance = null;
+let mousePollInterval = null;
+let lastCursorPoint = { x: 0, y: 0 };
+let isQuitting = false;
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
-const iconPath = path.join(__dirname, '..', 'icon.ico'); // Path to your logo
+
+app.on('second-instance', () => {
+    if (chatWin) {
+        if (chatWin.isMinimized()) chatWin.restore();
+        chatWin.show();
+        chatWin.focus();
+    }
+});
 
 app.whenReady().then(async () => {
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
@@ -26,90 +39,104 @@ app.whenReady().then(async () => {
 
     try {
         const eo = new ElectronOllama({ basePath: app.getPath('userData') });
-        if (!(await eo.isRunning())) {
-            console.log("Starting bundled Ollama...");
-            ollamaInstance = await eo.serve('latest');
-        }
-    } catch (error) {
-        console.error("Ollama Bundle Error:", error);
-    }
+        if (!(await eo.isRunning())) await eo.serve('latest');
+    } catch (error) { console.error(error); }
 
-    // Start Global Listeners
-    startIdleWatcher(() => {
-        if (win && !win.isDestroyed() && fs.existsSync(settingsPath)) {
-            win.webContents.send('pet-speak', `Welcome back, ${currentUserName}!`);
-        }
-    });
-    uIOhook.on('mousedown', () => {
-        if (win && !win.isDestroyed()) win.webContents.send('global-click');
-    });
-    uIOhook.start();
+    setupIPC();
 
-    const isFirstRun = !fs.existsSync(settingsPath);
-    if (isFirstRun) {
+    if (!fs.existsSync(settingsPath)) {
         createSetupWindow();
     } else {
-        createPetWindow();
+        createAppWindows();
     }
 });
 
-// --- WINDOW CREATION FUNCTIONS ---
 function createSetupWindow() {
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    if (win) win.close();
-
-    win = new BrowserWindow({
-        width: width, height: height,
-        resizable: false, transparent: false, frame: true,
-        autoHideMenuBar: true, backgroundColor: '#212529',
-        icon: iconPath, // ADDED ICON
+    setupWin = new BrowserWindow({
+        width: 600, height: 700, frame: false, resizable: false,
+        icon: path.join(__dirname, '..', 'icon.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true, nodeIntegration: false,
-        },
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: false
+        }
     });
-
-    win.setMenu(null);
-    win.loadFile(path.join(__dirname, '../renderer/setup.html'));
+    setupWin.loadFile(path.join(__dirname, '../renderer/setup.html'));
 }
 
-function createPetWindow() {
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    if (win) win.close();
+function createAppWindows() {
+    // FIX: Prevent multiple pets from spawning
+    if (petWin) return;
 
-    win = new BrowserWindow({
-        width: width, height: height, x: 0, y: 0,
-        transparent: true, // Must be true at creation
-        frame: false, alwaysOnTop: true, skipTaskbar: true,
-        hasShadow: false, resizable: false, focusable: false,
-        icon: iconPath, // ADDED ICON
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.workAreaSize;
+
+    petWin = new BrowserWindow({
+        width, height, x: 0, y: 0,
+        transparent: true, frame: false, alwaysOnTop: true,
+        skipTaskbar: true, hasShadow: false, resizable: false, focusable: false,
+        icon: path.join(__dirname, '..', 'icon.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true, nodeIntegration: false,
+            contextIsolation: true,
+            nodeIntegration: false,
+            webSecurity: false,
+            backgroundThrottling: false,
+            sandbox: false
         },
     });
+    petWin.loadFile(path.join(__dirname, '../renderer/index.html'), { query: { view: 'pet' } });
+    petWin.setIgnoreMouseEvents(true, { forward: true });
 
-    win.setIgnoreMouseEvents(true, { forward: true });
-    win.loadFile(path.join(__dirname, '../renderer/index.html'));
+    chatWin = new BrowserWindow({
+        width: 400, height: 600, frame: false, show: false, skipTaskbar: false,
+        resizable: false, alwaysOnTop: true,
+        icon: path.join(__dirname, '..', 'icon.ico'),
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            webSecurity: false,
+            backgroundThrottling: false,
+            sandbox: false
+        },
+    });
+    chatWin.loadFile(path.join(__dirname, '../renderer/index.html'), { query: { view: 'chat' } });
+
+    chatWin.on('close', (e) => {
+        if (!isQuitting) {
+            e.preventDefault();
+            chatWin.hide();
+        }
+    });
+
+    chatWin.on('restore', () => {
+        chatWin.setAlwaysOnTop(true);
+        chatWin.moveTop();
+        chatWin.focus();
+    });
+
+    startMousePolling();
 }
 
-// --- IPC LISTENERS (GLOBAL) ---
-ipcMain.on('log-to-terminal', (_, msg) => console.log(msg));
-ipcMain.on('open-external', (_, url) => shell.openExternal(url));
-ipcMain.on('set-pet-name', (_, name) => { currentPetName = name; });
-ipcMain.on('set-user-name', (_, name) => { currentUserName = name; });
-ipcMain.on('copy-code', (_, text) => clipboard.writeText(text));
-ipcMain.on('minimize-window', () => { if (win) win.minimize(); });
-ipcMain.on('toggle-fullscreen', () => { if (win) win.setFullScreen(!win.isFullScreen()); });
+function startMousePolling() {
+    if (mousePollInterval) clearInterval(mousePollInterval);
+    mousePollInterval = setInterval(() => {
+        const point = screen.getCursorScreenPoint();
+        lastCursorPoint = point;
+        if (petWin && !petWin.isDestroyed()) {
+            petWin.webContents.send('global-mousemove', { x: point.x, y: point.y });
+        }
+    }, 16);
+}
 
-ipcMain.on('start-initial-setup', async (_, modelName) => {
+async function downloadOllamaModel(modelName, targetWin, progressChannel) {
     try {
-        if (win) win.webContents.send('initial-download-progress', { status: 'Connecting to Ollama...', percent: 0 });
-
-        const response = await fetch('http://localhost:11434/api/pull', {
+        const response = await fetch('http://127.0.0.1:11434/api/pull', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: modelName, stream: true })
+            body: JSON.stringify({ name: modelName })
         });
 
         const reader = response.body.getReader();
@@ -118,153 +145,162 @@ ipcMain.on('start-initial-setup', async (_, modelName) => {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+
             const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n');
+            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
             for (const line of lines) {
-                if (!line.trim()) continue;
                 try {
                     const data = JSON.parse(line);
-                    if (data.total && data.completed) {
+                    if (data.status === 'success') {
+                        targetWin.webContents.send(progressChannel, { status: 'Complete!', percent: 100 });
+                    } else if (data.total && data.completed) {
                         const percent = Math.round((data.completed / data.total) * 100);
-                        if (win) win.webContents.send('initial-download-progress', { status: data.status, percent });
+                        targetWin.webContents.send(progressChannel, { status: `Downloading...`, percent: percent });
+                    } else if (data.status) {
+                        targetWin.webContents.send(progressChannel, { status: data.status, percent: 0 });
                     }
                 } catch (e) { }
             }
         }
-
-        if (win) win.webContents.send('initial-download-progress', { status: 'Complete!', percent: 100 });
-
-        // TRANSITION: Destroy setup window and open Pet window
-        setTimeout(() => {
-            createPetWindow();
-        }, 1000);
-
     } catch (err) {
-        if (win) win.webContents.send('initial-download-progress', { status: 'Error downloading.', percent: 0 });
-        console.error(err);
+        console.error('Download error:', err);
+        targetWin.webContents.send(progressChannel, { status: 'Failed to connect to Ollama.', percent: 0 });
     }
-});
+}
 
-ipcMain.handle('get-settings', () => {
-    if (fs.existsSync(settingsPath)) {
-        const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        currentPetName = data.petName || "Miko";
-        currentUserName = data.userName || "Arafat";
-        return data;
-    }
-    return { petName: "Miko", userName: "Arafat", model: "qwen:latest", petType: "parrot" };
-});
-
-ipcMain.on('save-settings', (_, settings) => {
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
-    currentPetName = settings.petName;
-    currentUserName = settings.userName;
-    if (win) win.webContents.send('pet-speak', "Settings saved!");
-});
-
-ipcMain.on('uninstall-model', (_, modelName) => {
-    if (!modelName) return;
-    if (win) win.webContents.send('download-progress', { status: `Uninstalling ${modelName}...`, percent: 0 });
-    const uninstallProcess = spawn('ollama', ['rm', modelName]);
-    uninstallProcess.on('close', (code) => {
-        if (code === 0) { if (win) win.webContents.send('download-progress', { status: 'Uninstalled successfully!', percent: 100 }); }
-        else { if (win) win.webContents.send('download-progress', { status: 'Uninstall failed.', percent: 0 }); }
+function setupIPC() {
+    ipcMain.on('start-initial-setup', (event, modelName) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        downloadOllamaModel(modelName, win, 'initial-download-progress');
     });
-});
 
-ipcMain.on('download-model', (_, modelName) => {
-    if (currentDownloadProcess) currentDownloadProcess.kill();
-    if (win) win.webContents.send('download-progress', { status: 'Starting download...', percent: 0 });
-    currentDownloadProcess = spawn('ollama', ['pull', modelName]);
+    ipcMain.on('finish-setup', () => {
+        if (petWin) return; // FIX: Prevent multiple triggers
+        if (setupWin) {
+            setupWin.close();
+            setupWin = null;
+        }
+        createAppWindows();
+    });
 
-    currentDownloadProcess.stdout.on('data', (data) => {
-        const output = data.toString();
-        const match = output.match(/(\d+)%/);
-        if (match) {
-            if (win) win.webContents.send('download-progress', { status: 'Downloading...', percent: parseInt(match[1]) });
-        } else if (output.includes('success')) {
-            if (win) win.webContents.send('download-progress', { status: 'Complete!', percent: 100 });
-            currentDownloadProcess = null;
+    ipcMain.on('download-model', (event, modelName) => {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        downloadOllamaModel(modelName, win, 'download-progress');
+    });
+
+    ipcMain.on('uninstall-model', (_, modelName) => {
+        if (!modelName || !chatWin) return;
+        chatWin.webContents.send('download-progress', { status: `Uninstalling...`, percent: 0 });
+        const { spawn } = require('child_process');
+        const p = spawn('ollama', ['rm', modelName]);
+        p.on('close', (code) => {
+            if (chatWin) chatWin.webContents.send('download-progress', { status: code === 0 ? 'Uninstalled!' : 'Failed.', percent: 0 });
+        });
+    });
+
+    ipcMain.handle('get-settings', () => {
+        if (fs.existsSync(settingsPath)) {
+            const data = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+            currentPetName = data.petName || "Miko";
+            currentUserName = data.userName || "Arafat";
+            return data;
+        }
+        return { petName: "Miko", userName: "Arafat", model: "qwen:latest", petType: "parrot" };
+    });
+
+    ipcMain.on('save-settings', (_, settings) => {
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+        currentPetName = settings.petName;
+        currentUserName = settings.userName;
+        if (chatWin) chatWin.webContents.send('pet-speak', "Settings saved!");
+    });
+
+    ipcMain.on('show-chat', () => {
+        if (!chatWin) return;
+        if (chatWin.isMinimized()) chatWin.restore();
+        chatWin.setAlwaysOnTop(true);
+        chatWin.show();
+        chatWin.moveTop();
+        chatWin.focus();
+    });
+
+    ipcMain.on('minimize-chat', () => {
+        if (chatWin) {
+            chatWin.setAlwaysOnTop(false);
+            chatWin.minimize();
         }
     });
-});
 
-ipcMain.on('chat-message', async (_, userText) => {
-    if (!win || win.isDestroyed()) return;
-    const lowerText = userText.toLowerCase();
+    ipcMain.on('close-chat', () => { if (chatWin) chatWin.hide(); });
+    ipcMain.on('toggle-fullscreen-chat', () => { if (chatWin) chatWin.setFullScreen(!chatWin.isFullScreen()); });
 
-    if (lowerText.includes("delete") || lowerText.includes("remove")) {
-        const pathToDelete = await getSelectedPath();
-        if (pathToDelete) {
-            win.webContents.send('pet-speak', "Deleting...");
-            const resultMessage = await executeAction('delete', pathToDelete);
-            win.webContents.send('chat-response', resultMessage);
-            win.webContents.send('pet-speak', resultMessage);
-            return;
-        } else {
-            win.webContents.send('chat-response', "Please select a file or folder in Windows Explorer first.");
-            return;
+    ipcMain.on('open-file-dialog', async () => {
+        if (!chatWin) return;
+        const result = await dialog.showOpenDialog(chatWin, {
+            properties: ['openFile'],
+            filters: [{ name: 'Images/Videos', extensions: ['jpg', 'png', 'jpeg', 'gif', 'mp4'] }]
+        });
+        if (!result.canceled && result.filePaths.length > 0) {
+            chatWin.webContents.send('file-selected', result.filePaths[0]);
         }
-    }
+    });
 
-    if (lowerText.includes("open") || lowerText.includes("show")) {
-        const pathToOpen = await getSelectedPath();
-        if (pathToOpen) {
-            win.webContents.send('pet-speak', "Opening...");
-            const resultMessage = await executeAction('open', pathToOpen);
-            win.webContents.send('chat-response', resultMessage);
-            win.webContents.send('pet-speak', resultMessage);
-            return;
-        } else {
-            win.webContents.send('chat-response', "Please select a file or folder in Windows Explorer first.");
-            return;
-        }
-    }
+    ipcMain.on('hit-region', (_, region) => {
+        if (!petWin || petWin.isDestroyed()) return;
+        if (region.active) petWin.setIgnoreMouseEvents(false);
+        else petWin.setIgnoreMouseEvents(true, { forward: true });
+    });
 
-    const brainResponse = await askBrain(userText, null, currentPetName, currentUserName, chatHistory);
-    chatHistory.push({ role: 'user', content: userText });
-    chatHistory.push({ role: 'assistant', content: brainResponse.text });
-    if (chatHistory.length > 10) chatHistory.shift();
+    ipcMain.on('show-pet-menu', () => {
+        if (!petWin || petWin.isDestroyed() || !chatWin) return;
+        const wasFocusable = petWin.isFocusable();
+        petWin.setFocusable(true);
+        petWin.focus();
 
-    win.webContents.send('chat-response', brainResponse.text);
-    win.webContents.send('pet-speak', brainResponse.text);
-});
+        const menu = Menu.buildFromTemplate([
+            { label: '💬 Open Chat', click: () => { chatWin.show(); chatWin.focus(); } },
+            { type: 'separator' },
+            { label: '📍 Stay Here', click: () => petWin.webContents.send('command', 'stay') },
+            { label: '🏃 Follow Cursor', click: () => petWin.webContents.send('command', 'follow') },
+            { type: 'separator' },
+            { label: '🐱 Cat', click: () => petWin.webContents.send('switch-pet', 'cat') },
+            { label: '🐶 Dog', click: () => petWin.webContents.send('switch-pet', 'dog') },
+            { label: '🐦 Parrot', click: () => petWin.webContents.send('switch-pet', 'parrot') },
+            { label: '🐉 Dragon', click: () => petWin.webContents.send('switch-pet', 'dragon') },
+            { type: 'separator' },
+            {
+                label: 'Quit AuraPet',
+                click: () => {
+                    isQuitting = true;
+                    app.quit();
+                }
+            }
+        ]);
 
-ipcMain.on('hit-region', (_, region) => {
-    if (!win || win.isDestroyed()) return;
-    if (region.active) win.setIgnoreMouseEvents(false);
-    else win.setIgnoreMouseEvents(true, { forward: true });
-});
+        menu.popup({
+            window: petWin,
+            x: Math.round(lastCursorPoint.x),
+            y: Math.round(lastCursorPoint.y),
+            callback: () => { if (petWin) petWin.setFocusable(wasFocusable); }
+        });
+    });
 
-ipcMain.on('toggle-focus', (_, isFocused) => {
-    if (!win || win.isDestroyed()) return;
-    win.setFocusable(isFocused);
-    if (isFocused) {
-        win.focus();
-        win.setIgnoreMouseEvents(false);
-    } else {
-        win.setIgnoreMouseEvents(true, { forward: true });
-    }
-});
+    ipcMain.on('toggle-focus', (_, isFocused) => {
+        if (!petWin || petWin.isDestroyed()) return;
+        petWin.setFocusable(isFocused);
+        if (isFocused) petWin.focus();
+    });
 
-ipcMain.on('show-pet-menu', () => {
-    const menu = Menu.buildFromTemplate([
-        { label: '💬 Open Chat', click: () => win.webContents.send('command', 'chat') },
-        { label: '✏️ Set Pet Name', click: () => win.webContents.send('set-name') },
-        { label: '👤 Set Your Name', click: () => win.webContents.send('set-user-name') },
-        { type: 'separator' },
-        { label: '📍 Stay Here', click: () => win.webContents.send('command', 'stay') },
-        { label: '🏃 Follow Cursor', click: () => win.webContents.send('command', 'follow') },
-        { type: 'separator' },
-        { label: '🐱 Cat', click: () => win.webContents.send('switch-pet', 'cat') },
-        { label: '🐶 Dog', click: () => win.webContents.send('switch-pet', 'dog') },
-        { label: '🐦 Parrot', click: () => win.webContents.send('switch-pet', 'parrot') },
-        { label: '🐉 Dragon', click: () => win.webContents.send('switch-pet', 'dragon') },
-        { label: '🪰 Dragonfly', click: () => win.webContents.send('switch-pet', 'dragonfly') },
-        { type: 'separator' },
-        { label: 'Quit AuraPet', click: () => app.quit() }
-    ]);
-    menu.popup({ window: win });
+    ipcMain.on('copy-code', (_, text) => clipboard.writeText(text));
+    ipcMain.on('log-to-terminal', (_, msg) => console.log(msg));
+    ipcMain.on('open-external', (_, url) => shell.openExternal(url));
+
+    startIdleWatcher(() => { if (chatWin) chatWin.webContents.send('pet-speak', `Welcome back, ${currentUserName}!`); });
+}
+
+app.on('before-quit', () => {
+    isQuitting = true;
 });
 
 app.on('window-all-closed', () => app.quit());

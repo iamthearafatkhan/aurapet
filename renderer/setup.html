@@ -15,6 +15,7 @@
             height: 100vh;
             margin: 0;
             overflow: hidden;
+            user-select: none;
         }
 
         .container {
@@ -98,7 +99,6 @@
             display: block;
         }
 
-        /* Progress Bar Styles */
         #progress-container {
             display: none;
             margin-top: 20px;
@@ -146,16 +146,16 @@
             <div class="section">
                 <h3>2. Choose Your Brain</h3>
                 <div class="options" id="brain-options">
-                    <button data-model="hf.co/unlimitedpipe/decide-0.5b-GGUF:latest" onclick="selectBrain(this)">Low
-                        (0.5B)<span class="description">Fast, 531MB</span></button>
-                    <button data-model="qwen:latest" class="selected" onclick="selectBrain(this)">Mid (4B)<span
-                            class="description">Balanced, 2.3GB</span></button>
+                    <button data-model="hf.co/unlimitedpipe/decide-0.5b-GGUF:latest" class="selected"
+                        onclick="selectBrain(this)">Low (0.5B)<span class="description">Fast, ~0.4 GB</span></button>
+                    <button data-model="qwen:latest" onclick="selectBrain(this)">Mid (4B)<span
+                            class="description">Balanced, ~2.5 GB</span></button>
                     <button data-model="deepseek-coder:6.7b" onclick="selectBrain(this)">High (6.7B)<span
-                            class="description">Best Code, 3.8GB</span></button>
+                            class="description">Best Code, ~3.8 GB</span></button>
                     <button data-model="llama3:8b" onclick="selectBrain(this)">Max (8B)<span class="description">Smart,
-                            4.7GB</span></button>
+                            ~4.7 GB</span></button>
                     <button data-model="qwen:14b" onclick="selectBrain(this)">Ultra (14B)<span class="description">Deep
-                            Logic, 8.2GB</span></button>
+                            Logic, ~9.0 GB</span></button>
                 </div>
             </div>
 
@@ -175,7 +175,8 @@
 
     <script>
         let selectedPet = 'parrot';
-        let selectedModel = 'qwen:latest';
+        let selectedModel = 'hf.co/unlimitedpipe/decide-0.5b-GGUF:latest';
+        let isSetupDone = false;
 
         function selectPet(btn) {
             document.querySelectorAll('#pet-options button').forEach(b => b.classList.remove('selected'));
@@ -190,11 +191,13 @@
         }
 
         function finishSetup() {
-            // Hide form, show progress
+            if (isSetupDone) return;
+            isSetupDone = true;
+
             document.getElementById('setup-form').style.display = 'none';
             document.getElementById('progress-container').style.display = 'block';
 
-            // Save settings to backend
+            // Save settings
             window.petAPI.saveSettings({
                 petName: "Miko",
                 userName: "Arafat",
@@ -202,7 +205,7 @@
                 petType: selectedPet
             });
 
-            // Tell main process to start downloading
+            // Start downloading
             window.petAPI.startInitialSetup(selectedModel);
         }
 
@@ -210,6 +213,14 @@
         window.petAPI.onInitialDownloadProgress((data) => {
             document.getElementById('progress-bar').style.width = `${data.percent}%`;
             document.getElementById('progress-text').textContent = `${data.percent}% - ${data.status}`;
+
+            // If download is complete, finish setup and launch the pet!
+            if (data.percent === 100 || data.status === 'Complete!') {
+                setTimeout(() => {
+                    document.getElementById('progress-text').textContent = "Starting AuraPet...";
+                    window.petAPI.finishSetup();
+                }, 1000);
+            }
         });
     </script>
 </body>
