@@ -1,0 +1,48 @@
+{
+  "name": "aurapet",
+  "version": "1.0.0",
+  "description": "AuraPet - AI Desktop Companion",
+  "author": "Arafat Khan",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-ollama": "^0.1.1",
+    "lottie-web": "^5.12.2",
+    "uiohook-napi": "^1.5.5"
+  },
+  "build": {
+    "appId": "com.iamthearafatkhan.aurapet",
+    "productName": "AuraPet",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico",
+      "sign": null,
+      "signingHashAlgorithms": null,
+      "signDlls": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "electron/vosk-model-small-en-us-0.15",
+        "to": "vosk-model-small-en-us-0.15"
+      }
+    ]
+  }
+}

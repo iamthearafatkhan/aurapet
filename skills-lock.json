@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "threejs-procedural-creatures": {
+      "source": "linegel/threejs-complete-set-of-skill",
+      "sourceType": "github",
+      "skillPath": "skills/threejs-procedural-creatures/SKILL.md",
+      "computedHash": "3d5890f1365a8d31e969483cef3eb8d7238f04a76915ed8c7cce2f77dc70175f"
+    }
+  }
+}

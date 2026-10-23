@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #212529;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            width: 500px;
+            padding: 30px;
+            background: #2b3035;
+            border-radius: 16px;
+            border: 1px solid #343a40;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            color: #0d6efd;
+            margin-bottom: 5px;
+        }
+
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #212529;
+            border-radius: 10px;
+            text-align: left;
+        }
+
+        .section h3 {
+            margin-top: 0;
+            color: #e9ecef;
+            font-size: 16px;
+        }
+
+        .options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            padding: 12px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #343a40;
+            color: white;
+            border: 1px solid #495057;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #495057;
+        }
+
+        button.selected {
+            background: #0d6efd;
+            border-color: #0d6efd;
+            font-weight: bold;
+        }
+
+        #start-btn {
+            margin-top: 20px;
+            padding: 15px;
+            font-size: 18px;
+            background: #198754;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+        }
+
+        #start-btn:hover {
+            background: #157347;
+        }
+
+        .description {
+            font-size: 12px;
+            color: #adb5bd;
+            margin-top: 5px;
+            display: block;
+        }
+
+        /* Progress Bar Styles */
+        #progress-container {
+            display: none;
+            margin-top: 20px;
+        }
+
+        #progress-bar-bg {
+            width: 100%;
+            background: #343a40;
+            border-radius: 8px;
+            height: 20px;
+            overflow: hidden;
+        }
+
+        #progress-bar {
+            width: 0%;
+            background: #0d6efd;
+            height: 100%;
+            transition: width 0.3s;
+        }
+
+        #progress-text {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #adb5bd;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Welcome to AuraPet</h1>
+        <p>Let's set up your AI companion.</p>
+
+        <div id="setup-form">
+            <div class="section">
+                <h3>1. Choose Your Pet</h3>
+                <div class="options" id="pet-options">
+                    <button data-pet="parrot" class="selected" onclick="selectPet(this)">🐦 Parrot</button>
+                    <button data-pet="cat" onclick="selectPet(this)">🐱 Cat</button>
+                    <button data-pet="dog" onclick="selectPet(this)">🐶 Dog</button>
+                    <button data-pet="dragon" onclick="selectPet(this)">🐉 Dragon</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>2. Choose Your Brain</h3>
+                <div class="options" id="brain-options">
+                    <button data-model="hf.co/unlimitedpipe/decide-0.5b-GGUF:latest" onclick="selectBrain(this)">Low
+                        (0.5B)<span class="description">Fast, 531MB</span></button>
+                    <button data-model="qwen:latest" class="selected" onclick="selectBrain(this)">Mid (4B)<span
+                            class="description">Balanced, 2.3GB</span></button>
+                    <button data-model="deepseek-coder:6.7b" onclick="selectBrain(this)">High (6.7B)<span
+                            class="description">Best Code, 3.8GB</span></button>
+                    <button data-model="llama3:8b" onclick="selectBrain(this)">Max (8B)<span class="description">Smart,
+                            4.7GB</span></button>
+                    <button data-model="qwen:14b" onclick="selectBrain(this)">Ultra (14B)<span class="description">Deep
+                            Logic, 8.2GB</span></button>
+                </div>
+            </div>
+
+            <button id="start-btn" onclick="finishSetup()">Start AuraPet</button>
+        </div>
+
+        <!-- Download Progress -->
+        <div id="progress-container">
+            <h2>Downloading AI Brain...</h2>
+            <p>This may take a few minutes depending on your internet speed.</p>
+            <div id="progress-bar-bg">
+                <div id="progress-bar"></div>
+            </div>
+            <div id="progress-text">0% - Connecting...</div>
+        </div>
+    </div>
+
+    <script>
+        let selectedPet = 'parrot';
+        let selectedModel = 'qwen:latest';
+
+        function selectPet(btn) {
+            document.querySelectorAll('#pet-options button').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            selectedPet = btn.getAttribute('data-pet');
+        }
+
+        function selectBrain(btn) {
+            document.querySelectorAll('#brain-options button').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            selectedModel = btn.getAttribute('data-model');
+        }
+
+        function finishSetup() {
+            // Hide form, show progress
+            document.getElementById('setup-form').style.display = 'none';
+            document.getElementById('progress-container').style.display = 'block';
+
+            // Save settings to backend
+            window.petAPI.saveSettings({
+                petName: "Miko",
+                userName: "Arafat",
+                model: selectedModel,
+                petType: selectedPet
+            });
+
+            // Tell main process to start downloading
+            window.petAPI.startInitialSetup(selectedModel);
+        }
+
+        // Listen for download progress
+        window.petAPI.onInitialDownloadProgress((data) => {
+            document.getElementById('progress-bar').style.width = `${data.percent}%`;
+            document.getElementById('progress-text').textContent = `${data.percent}% - ${data.status}`;
+        });
+    </script>
+</body>
+
+</html>
