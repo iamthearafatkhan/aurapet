@@ -5,6 +5,7 @@ const { ElectronOllama } = require('electron-ollama');
 const { executeAction, getSelectedPath } = require('./action-executor');
 const { askBrain } = require('./brain-router');
 const { startIdleWatcher } = require('./idle-welcome');
+app.setName('AuraPet');
 
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
