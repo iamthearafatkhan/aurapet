@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAQ - AuraPet</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="details.html">Details</a>
+        <a href="faq.html" class="active">FAQ</a>
+    </nav>
+
+    <div class="container">
+        <h1 class="section-title" style="margin-top: 40px;">Frequently Asked Questions</h1>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <h3 style="color: var(--honey-gold);">How do I reset the app to see the setup screen again?</h3>
+            <p>Press <code>Windows Key + R</code>, type <code>%appdata%\AuraPet</code>, and delete the
+                <code>settings.json</code> file. Restart the app.</p>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <h3 style="color: var(--honey-gold);">Do I need to install Ollama or Python?</h3>
+            <p>No! AuraPet automatically downloads the Ollama engine into your AppData folder during the first setup.
+            </p>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <h3 style="color: var(--honey-gold);">Where are the AI models stored?</h3>
+            <p>They are stored in <code>%USERPROFILE%\.ollama\models</code>. If you use the official Ollama app, they
+                share the same models.</p>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <h3 style="color: var(--honey-gold);">The chat window is transparent over YouTube videos.</h3>
+            <p>This is a known Electron/Windows GPU compositing bug. It does not affect functionality. We are looking
+                into a fix for future updates.</p>
+        </div>
+    </div>
+
+    <footer>
+        <p>Built with ❤️ by <a href="https://github.com/iamthearafatkhan">Arafat Khan</a></p>
+    </footer>
+</body>
+
+</html>

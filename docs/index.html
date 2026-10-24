@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuraPet - AI Desktop Companion</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <nav>
+        <a href="index.html" class="active">Home</a>
+        <a href="details.html">Details</a>
+        <a href="faq.html">FAQ</a>
+    </nav>
+
+    <header style="text-align: center; padding: 100px 20px 40px;">
+        <h1
+            style="font-size: 4rem; color: var(--honey-gold); text-shadow: 0 0 20px rgba(245,158,11,0.4); margin-bottom: 10px;">
+            AuraPet</h1>
+        <p style="font-size: 1.2rem; color: var(--text-muted); max-width: 700px; margin: 0 auto 40px;">Your AI-powered
+            desktop companion. A tiny animated pet that lives on your screen, chats with you, and runs entirely on your
+            local machine.</p>
+
+        <a href="https://github.com/iamthearafatkhan/aurapet/releases/latest" id="download-btn"
+            class="btn btn-primary">Download for Windows (.exe)</a>
+        <a href="https://github.com/iamthearafatkhan/aurapet/pkgs/npm/aurapet" class="btn btn-secondary"
+            style="margin-left: 10px;">NPM Package</a>
+    </header>
+
+    <div class="container">
+        <div class="pets-showcase">
+            <div class="pet-card"><img src="./assets/parrot.gif" alt="Parrot">
+                <p>Parrot</p>
+            </div>
+            <div class="pet-card"><img src="./assets/cat.gif" alt="Cat">
+                <p>Cat</p>
+            </div>
+            <div class="pet-card"><img src="./assets/dog.gif" alt="Dog">
+                <p>Dog</p>
+            </div>
+            <div class="pet-card"><img src="./assets/dragon.gif" alt="Dragon">
+                <p>Dragon</p>
+            </div>
+        </div>
+
+        <h2 class="section-title" style="margin-top: 60px;">Why AuraPet?</h2>
+        <div class="grid">
+            <div class="card">
+                <h3 style="color: var(--honey-light);">🔒 100% Private</h3>
+                <p>No cloud, no API keys, no tracking. All AI processing happens locally on your computer using Ollama.
+                </p>
+            </div>
+            <div class="card">
+                <h3 style="color: var(--honey-light);">🧠 Multiple Brains</h3>
+                <p>Choose from 5 different AI models ranging from 0.4 GB to 9.0 GB depending on your PC's power.</p>
+            </div>
+            <div class="card">
+                <h3 style="color: var(--honey-light);">🚀 Zero Setup</h3>
+                <p>You don't need to install Python or Ollama manually. Just run the installer and pick a pet!</p>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Built with ❤️ by <a href="https://github.com/iamthearafatkhan">Arafat Khan</a></p>
+        <p><a href="https://github.com/iamthearafatkhan/aurapet/blob/main/LICENSE">MIT License</a> | Powered by <a
+                href="https://lottiefiles.com/">LottieFiles</a> & <a href="https://ollama.com/">Ollama</a></p>
+    </footer>
+
+    <script>
+        // Auto-fetch latest .exe
+        fetch('https://api.github.com/repos/iamthearafatkhan/aurapet/releases/latest')
+            .then(res => res.json())
+            .then(data => {
+                const exe = data.assets.find(a => a.name.endsWith('.exe'));
+                if (exe) {
+                    const btn = document.getElementById('download-btn');
+                    btn.href = exe.browser_download_url;
+                    btn.innerText = `Download ${data.tag_name} (.exe)`;
+                }
+            }).catch(console.error);
+    </script>
+</body>
+
+</html>
