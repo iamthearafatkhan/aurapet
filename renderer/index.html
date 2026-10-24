@@ -4,16 +4,17 @@
 <head>
     <meta charset="UTF-8" />
     <style>
+        /* FIX: Default to solid background so chat never bleeds video */
         html,
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
-            background: transparent !important;
             width: 100vw;
             height: 100vh;
             user-select: none;
             font-family: 'Segoe UI', sans-serif;
+            background: #212529;
         }
 
         #pet-container {
@@ -22,6 +23,11 @@
             height: 180px;
             pointer-events: none;
             transform-origin: center center;
+        }
+
+        #lottie-animation {
+            width: 100%;
+            height: 100%;
         }
 
         #speech-bubble {
@@ -58,7 +64,7 @@
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: #212529;
+            background-color: #212529;
             flex-direction: column;
             color: #f8f9fa;
         }
@@ -230,7 +236,7 @@
             font-weight: bold;
         }
     </style>
-    <script src="../node_modules/lottie-web/build/player/lottie.min.js"></script>
+    <script src="./lottie.min.js"></script>
 </head>
 
 <body>

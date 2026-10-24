@@ -20,7 +20,7 @@ let chatHistory = [];
 let mousePollInterval = null;
 let lastCursorPoint = { x: 0, y: 0 };
 let isQuitting = false;
-let eo = null; // Ollama Instance
+let eo = null;
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 
@@ -38,7 +38,6 @@ app.whenReady().then(async () => {
         else callback(false);
     });
 
-    // Initialize Ollama instance but DO NOT download yet
     eo = new ElectronOllama({ basePath: app.getPath('userData') });
 
     setupIPC();
@@ -46,7 +45,6 @@ app.whenReady().then(async () => {
     if (!fs.existsSync(settingsPath)) {
         createSetupWindow();
     } else {
-        // If settings exist, just ensure it's running quickly
         try {
             if (!(await eo.isRunning())) await eo.serve('latest');
         } catch (error) { console.error("Ollama boot error on existing install:", error); }
@@ -95,6 +93,7 @@ function createAppWindows() {
     chatWin = new BrowserWindow({
         width: 400, height: 600, frame: false, show: false, skipTaskbar: false,
         resizable: false, alwaysOnTop: true,
+        backgroundColor: '#212529',
         icon: path.join(__dirname, '..', 'icon.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -155,20 +154,24 @@ async function downloadOllamaModel(modelName, targetWin, progressChannel) {
             for (const line of lines) {
                 try {
                     const data = JSON.parse(line);
-                    if (data.status === 'success') {
-                        targetWin.webContents.send(progressChannel, { status: 'Complete!', percent: 100 });
-                    } else if (data.total && data.completed) {
-                        const percent = Math.round((data.completed / data.total) * 100);
-                        targetWin.webContents.send(progressChannel, { status: `Downloading Model...`, percent: percent });
-                    } else if (data.status) {
-                        targetWin.webContents.send(progressChannel, { status: data.status, percent: 0 });
+                    if (targetWin && !targetWin.isDestroyed()) {
+                        if (data.status === 'success') {
+                            targetWin.webContents.send(progressChannel, { status: 'Complete!', percent: 100 });
+                        } else if (data.total && data.completed) {
+                            const percent = Math.round((data.completed / data.total) * 100);
+                            targetWin.webContents.send(progressChannel, { status: `Downloading Model...`, percent: percent });
+                        } else if (data.status) {
+                            targetWin.webContents.send(progressChannel, { status: data.status, percent: 0 });
+                        }
                     }
                 } catch (e) { }
             }
         }
     } catch (err) {
         console.error('Download error:', err);
-        targetWin.webContents.send(progressChannel, { status: 'Failed to download model.', percent: 0 });
+        if (targetWin && !targetWin.isDestroyed()) {
+            targetWin.webContents.send(progressChannel, { status: 'Failed to download model.', percent: 0 });
+        }
     }
 }
 
@@ -177,27 +180,28 @@ function setupIPC() {
         const win = BrowserWindow.fromWebContents(event.sender);
 
         try {
-            // 1. Check if Ollama Engine is running. If not, download it.
             if (!(await eo.isRunning())) {
-                win.webContents.send('initial-download-progress', { status: 'Downloading AI Engine (First time only)...', percent: 0 });
+                if (win && !win.isDestroyed()) win.webContents.send('initial-download-progress', { status: 'Downloading AI Engine (First time only)...', percent: 0 });
 
-                // Use downloadLog to show progress of the engine download
                 await eo.serve('latest', {
                     downloadLog: (percent, message) => {
-                        win.webContents.send('initial-download-progress', {
-                            status: `Engine: ${message}`,
-                            percent: percent
-                        });
+                        if (win && !win.isDestroyed()) {
+                            win.webContents.send('initial-download-progress', {
+                                status: `Engine: ${message}`,
+                                percent: percent
+                            });
+                        }
                     }
                 });
             }
 
-            // 2. Engine is running, now download the model
             await downloadOllamaModel(modelName, win, 'initial-download-progress');
 
         } catch (err) {
             console.error('Setup failed:', err);
-            win.webContents.send('initial-download-progress', { status: 'Setup failed. Check internet.', percent: 0 });
+            if (win && !win.isDestroyed()) {
+                win.webContents.send('initial-download-progress', { status: 'Setup failed. Check internet.', percent: 0 });
+            }
         }
     });
 
@@ -240,6 +244,47 @@ function setupIPC() {
         currentPetName = settings.petName;
         currentUserName = settings.userName;
         if (chatWin) chatWin.webContents.send('pet-speak', "Settings saved!");
+    });
+
+    ipcMain.on('chat-message', async (_, userText) => {
+        const lowerText = userText.toLowerCase();
+
+        if (lowerText.includes("delete") || lowerText.includes("remove")) {
+            const pathToDelete = await getSelectedPath();
+            if (pathToDelete) {
+                chatWin.webContents.send('pet-speak', "Deleting...");
+                const msg = await executeAction('delete', pathToDelete);
+                chatWin.webContents.send('chat-response', msg);
+                chatWin.webContents.send('pet-speak', msg);
+                return;
+            }
+        }
+        if (lowerText.includes("open") || lowerText.includes("show")) {
+            const pathToOpen = await getSelectedPath();
+            if (pathToOpen) {
+                chatWin.webContents.send('pet-speak', "Opening...");
+                const msg = await executeAction('open', pathToOpen);
+                chatWin.webContents.send('chat-response', msg);
+                chatWin.webContents.send('pet-speak', msg);
+                return;
+            }
+        }
+
+        try {
+            const brainResponse = await askBrain(userText, null, currentPetName, currentUserName, chatHistory);
+
+            chatHistory.push({ role: 'user', content: userText }, { role: 'assistant', content: brainResponse.text });
+            if (chatHistory.length > 10) chatHistory.shift();
+
+            if (chatWin) chatWin.webContents.send('chat-response', brainResponse.text);
+            if (chatWin) chatWin.webContents.send('pet-speak', brainResponse.text);
+        } catch (err) {
+            console.error("Brain error:", err);
+            if (chatWin) {
+                chatWin.webContents.send('chat-response', "My brain is offline. Make sure Ollama is running in the background.");
+                chatWin.webContents.send('pet-speak', "My brain is offline.");
+            }
+        }
     });
 
     ipcMain.on('show-chat', () => {

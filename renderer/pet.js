@@ -39,7 +39,7 @@ let petY = window.innerHeight / 2;
 let velX = 0; let velY = 0;
 let targetX = petX; let targetY = petY;
 let mouseX = petX; let mouseY = petY;
-let lastMouseX = mouseX;   // last known *reported* position (for movement detection)
+let lastMouseX = mouseX;
 let lastMouseY = mouseY;
 
 let isFacingRight = true;
@@ -51,17 +51,13 @@ let wanderCooldown = 0;
 let isResting = false;
 let speechTimeout;
 
-// Animation feel-state
 let squash = 1;
 let bounceY = 0;
 let bounceVel = 0;
 let lastSpeed = 0;
 
-// ------------------------------------------------------------------
-// CHAT VIEW
-// ------------------------------------------------------------------
 if (viewMode === 'chat') {
-    document.body.style.background = '#212529';
+    document.body.style.backgroundColor = '#212529';
     petContainer.style.display = 'none';
     speechBubble.style.display = 'none';
     chatContainer.style.display = 'flex';
@@ -118,17 +114,32 @@ if (viewMode === 'chat') {
         });
     }
 
-    // ------------------------------------------------------------------
-    // PET VIEW
-    // ------------------------------------------------------------------
 } else {
-    document.body.style.background = 'transparent';
+    // FIX: Force both body and html to be transparent for the pet window
+    document.documentElement.style.background = 'transparent';
+    document.body.style.backgroundColor = 'transparent';
     chatContainer.style.display = 'none';
 
-    window.petAPI.getSettings().then(settings => {
-        if (settings.petType) loadPet(settings.petType);
-        if (settings.petName) petName = settings.petName;
-        if (settings.userName) userName = settings.userName;
+    function waitForLottie(callback, retries = 0) {
+        if (window.lottie) {
+            callback();
+        } else if (retries < 100) {
+            setTimeout(() => waitForLottie(callback, retries + 1), 50);
+        } else {
+            console.error("Lottie failed to load.");
+        }
+    }
+
+    waitForLottie(() => {
+        window.petAPI.getSettings().then(settings => {
+            if (settings.petType) {
+                loadPet(settings.petType);
+            } else {
+                loadPet('parrot');
+            }
+            if (settings.petName) petName = settings.petName;
+            if (settings.userName) userName = settings.userName;
+        });
     });
 
     window.petAPI.onSwitchPet((type) => loadPet(type));
@@ -161,11 +172,7 @@ if (viewMode === 'chat') {
         }
     });
 
-    // ------------------------------------------------------------------
-    // POLLING HANDLER — this is where the two bug fixes live
-    // ------------------------------------------------------------------
     window.petAPI.onGlobalMouseMove((data) => {
-        // Detect *real* movement (not the 60 fps idle heartbeat)
         const movedX = Math.abs(data.x - lastMouseX) > 1;
         const movedY = Math.abs(data.y - lastMouseY) > 1;
         const moved = movedX || movedY;
@@ -180,14 +187,12 @@ if (viewMode === 'chat') {
         mouseX = data.x;
         mouseY = data.y;
 
-        // FIX 2: hit-region detection from polling (reliable) instead of
-        // relying on forwarded local mousemove events.
         if (isDragging) {
             if (!wasHovering) {
                 window.petAPI.sendHitRegion({ active: true });
                 wasHovering = true;
             }
-            return; // local mousemove drives the drag position
+            return;
         }
 
         const petRect = petContainer.getBoundingClientRect();
@@ -201,13 +206,10 @@ if (viewMode === 'chat') {
         }
     });
 
-    // Local mousemove only handles the drag (smoother than the poll interval)
     window.addEventListener('mousemove', (e) => {
         if (isDragging) {
-            petX = e.clientX;
-            petY = e.clientY;
-            targetX = petX;
-            targetY = petY;
+            petX = e.clientX; petY = e.clientY;
+            targetX = petX; targetY = petY;
             petContainer.style.left = `${petX - 90}px`;
             petContainer.style.top = `${petY - 90}px`;
         }
@@ -237,9 +239,6 @@ if (viewMode === 'chat') {
         }
     });
 
-    // ------------------------------------------------------------------
-    // ANIMATION LOOP
-    // ------------------------------------------------------------------
     function animate() {
         if (isDragging) {
             petContainer.style.left = `${petX - 90}px`;
@@ -256,34 +255,27 @@ if (viewMode === 'chat') {
         const now = Date.now();
         const timeSinceMove = now - lastMouseMoveTime;
 
-        // ---- FIX 1: IDLE WANDER (mouse branch only when active) ----
         if (!isStaying) {
             if (timeSinceMove > 5000) {
-                // Idle: ignore cursor entirely, wander around the screen
                 if (!isResting) {
                     isResting = true;
-                    wanderCooldown = now + 2000; // pause 2 s before first wander
+                    wanderCooldown = now + 2000;
                 } else if (now > wanderCooldown) {
-                    // Pick a random target anywhere on screen
                     targetX = Math.random() * (window.innerWidth - 200) + 100;
                     targetY = Math.random() * (window.innerHeight - 200) + 100;
                     wanderCooldown = now + 4000 + Math.random() * 4000;
                 }
             } else {
-                // Active: follow the cursor
                 isResting = false;
                 const distToMouse = Math.hypot(mouseX - petX, mouseY - petY);
                 if (distToMouse > 55) {
-                    targetX = mouseX;
-                    targetY = mouseY;
+                    targetX = mouseX; targetY = mouseY;
                 } else {
-                    targetX = petX;
-                    targetY = petY;
+                    targetX = petX; targetY = petY;
                 }
             }
         }
 
-        // ---- SPRING PHYSICS ----
         const dx = targetX - petX;
         const dy = targetY - petY;
         const distance = Math.hypot(dx, dy);
@@ -293,8 +285,7 @@ if (viewMode === 'chat') {
             velX += (dx / distance) * force;
             velY += (dy / distance) * force;
         }
-        velX *= 0.88;
-        velY *= 0.88;
+        velX *= 0.88; velY *= 0.88;
 
         const speed = Math.hypot(velX, velY);
         const maxSpeed = 4.2;
@@ -303,19 +294,16 @@ if (viewMode === 'chat') {
             velY = (velY / speed) * maxSpeed;
         }
 
-        petX += velX;
-        petY += velY;
+        petX += velX; petY += velY;
         petX = Math.max(50, Math.min(window.innerWidth - 50, petX));
         petY = Math.max(50, Math.min(window.innerHeight - 50, petY));
 
-        // ---- BOUNCE ON STOP ----
         if (speed < 0.4 && lastSpeed > 1.8) bounceVel = -2.8;
         lastSpeed = speed;
         bounceVel += 0.45;
         bounceY += bounceVel;
         if (bounceY > 0) { bounceY = 0; bounceVel = 0; }
 
-        // ---- FACING ----
         if (Math.abs(velX) > 0.25) {
             const wantRight = velX > 0;
             if (wantRight !== isFacingRight) isFacingRight = wantRight;
@@ -327,15 +315,12 @@ if (viewMode === 'chat') {
             }
         }
 
-        // ---- SQUASH & STRETCH ----
         const targetSquash = 1 + Math.min(Math.abs(velX) * 0.03 + Math.abs(bounceVel) * 0.02, 0.15);
         squash += (targetSquash - squash) * 0.2;
 
-        // ---- BOB ----
         const intensity = Math.min(speed / maxSpeed, 1);
         const bob = Math.abs(Math.sin(now * 0.012)) * 6 * intensity;
 
-        // ---- APPLY ----
         const sx = (isFacingRight ? 1 : -1) * faceMultiplier;
         petContainer.style.transform = `scaleX(${sx}) scaleY(${squash})`;
         petContainer.style.left = `${petX - 90}px`;
@@ -350,9 +335,6 @@ if (viewMode === 'chat') {
     setInterval(animate, 16);
 }
 
-// ------------------------------------------------------------------
-// HELPERS
-// ------------------------------------------------------------------
 function loadPet(petType) {
     currentPet = petType;
     if (lottieAnim) lottieAnim.destroy();
@@ -366,13 +348,18 @@ function loadPet(petType) {
     petContainer.style.transform = `scaleX(${1 * faceMultiplier})`;
 
     if (window.lottie && animContainer) {
+        const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/'));
+        const jsonUrl = `${baseUrl}/assets/animations/${petType}.json`;
+
         lottieAnim = window.lottie.loadAnimation({
             container: animContainer,
             renderer: 'svg',
             loop: true,
             autoplay: true,
-            path: `./assets/animations/${petType}.json`
+            path: jsonUrl
         });
+    } else {
+        console.error("Lottie library is missing or container not found!");
     }
 }
 
