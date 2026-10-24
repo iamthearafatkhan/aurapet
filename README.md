@@ -1,8 +1,8 @@
 # 🐾 AuraPet
 
-> Your AI-powered desktop companion. A tiny animated pet that lives on your screen, follows your cursor, chats with you, and helps you manage files — powered by a local LLM that runs entirely on your machine.
+> Your AI-powered desktop companion. A tiny animated pet that lives on your screen, follows your cursor, chats with you, and runs entirely on your local machine.
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078D6)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -10,36 +10,32 @@
 
 ## ✨ What is AuraPet?
 
-AuraPet is a lightweight Electron desktop application that turns a Lottie animation into an interactive AI pet. It sits on top of all your other windows, follows your cursor around the screen, idles with cute little wander animations, and — when you open its chat — answers questions using a **local Ollama model** running on your own hardware.
+AuraPet is a lightweight Electron desktop application that turns a Lottie animation into an interactive AI pet. It sits on top of all your other windows, follows your cursor around the screen, idles with cute wander animations, and — when you open its chat — answers questions using a **local Ollama model** running on your own hardware.
 
 No accounts. No cloud. No API keys. Everything runs on your computer.
 
 ---
 
-## 🎬 What's new in v1.1.0
+## 🎬 What's new in v1.2.0
 
-- **Smooth spring physics** for the pet — it now has weight, bounce, and squash-stretch
-- **Real idle wandering** — after 5 seconds of no mouse movement, the pet pauses, then explores random spots on screen
-- **Picks up on your cursor even when the chat window is focused**
-- **Fixed minimize-to-taskbar** on Windows (chat window restores above the pet overlay)
-- **Right-click context menu** now reliably appears at the cursor position
-- **Auto-installing Ollama** — end users no longer need to install Ollama or run `ollama serve` manually
-- **Fixed a bug** where the chat ignored your selected model and always used `qwen:latest`
-- **Model dropdown in Settings** now shows approximate download size for each option
+- **Error-Free Setup:** The setup screen now shows live progress for the Ollama engine download, preventing the 15-minute freeze and the `spawn ENOENT` crash.
+- **Faster Launch:** The app now opens instantly on first launch instead of waiting for background downloads.
+- **NPM Package Ready:** The source code is now available on GitHub Packages for developers.
+- **Fixed Settings Crash:** The `ipcMain.handle('get-settings')` crash on the setup screen is resolved.
 
 ---
 
 ## 🚀 Installation (for end users)
 
 1. Go to the [Releases page](https://github.com/iamthearafatkhan/aurapet/releases/latest).
-2. Download **`AuraPet Setup 1.1.0.exe`**.
+2. Download **`AuraPet Setup 1.2.0.exe`**.
 3. Run it and follow the installer wizard.
 4. Launch **AuraPet** from the Start Menu or Desktop shortcut.
-5. On first launch, a **setup screen** appears — pick your pet and your brain (AI model), then click **Start AuraPet**.
-6. Wait for the model to download (the progress bar shows live percentage).
+5. On first launch, the **setup screen** opens instantly. Pick your pet and your brain (AI model), then click **Start AuraPet**.
+6. Watch the progress bar as it downloads the AI engine and your model.
 7. Enjoy your new desktop companion! 🐾
 
-> **You do not need to install Ollama, Python, Vosk, or anything else.**
+> **You do not need to install Ollama, Python, or anything else.**
 > AuraPet automatically downloads and manages the Ollama engine for you on first run.
 
 ---
@@ -57,15 +53,11 @@ AuraPet gives you five local AI models. Each one is a **tradeoff between speed, 
 | **Ultra (14B)** | `qwen:14b` | **~9.0 GB** | ~16 GB | Deep reasoning, complex tasks |
 
 **Which should I pick?**
-
 - **Just want a fun pet?** → *Mid (4B)*. It's what we recommend.
 - **Mostly asking for code?** → *High (6.7B)*.
 - **Old laptop with 8 GB RAM?** → *Low (0.5B)*.
-- **Powerful gaming PC?** → *Ultra (14B)*.
 
-You can change your model at any time in **Settings ⚙️** inside the chat window. AuraPet will download the new model on demand and uninstall the old one if you ask.
-
-> 💡 **The first download can take a few minutes** depending on your internet. Once downloaded, the model lives in `%USERPROFILE%\.ollama\models\` and is shared with any other Ollama app on your system. You only ever download a given model once.
+> 💡 **The first download can take a few minutes** depending on your internet. Once downloaded, the model lives in `%USERPROFILE%\.ollama\models\` and is shared with any other Ollama app on your system.
 
 ---
 
@@ -86,10 +78,9 @@ Lottie is rendered in-app using [`lottie-web`](https://github.com/airbnb/lottie-
 ## 🛠️ Building from source
 
 ### Requirements
-
 - **Node.js** 18+ ([download](https://nodejs.org/))
-- **Windows 10 / 11** (the primary target; macOS and Linux may work with tweaks)
-- **~1.5 GB free disk space** for dependencies and build output
+- **Windows 10 / 11** (the primary target)
+- **~1.5 GB free disk space**
 
 ### Steps
 
@@ -97,8 +88,8 @@ Lottie is rendered in-app using [`lottie-web`](https://github.com/airbnb/lottie-
 git clone https://github.com/iamthearafatkhan/aurapet.git
 cd aurapet
 npm install
-npx electron-rebuild     # rebuild native modules for your Electron version
-npm start                # run in development mode
+npx electron-rebuild
+npm start
 ```
 
 To produce the Windows installer:
