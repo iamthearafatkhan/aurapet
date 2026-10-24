@@ -1,9 +1,14 @@
 {
-  "name": "aurapet",
-  "version": "1.1.0",
+  "name": "@iamthearafatkhan/aurapet",
+  "version": "1.2.0",
   "description": "AuraPet - AI Desktop Companion",
   "author": "Arafat Khan",
+  "license": "MIT",
   "main": "electron/main.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iamthearafatkhan/aurapet.git"
+  },
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win nsis"

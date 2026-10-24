@@ -20,6 +20,7 @@ let chatHistory = [];
 let mousePollInterval = null;
 let lastCursorPoint = { x: 0, y: 0 };
 let isQuitting = false;
+let eo = null; // Ollama Instance
 
 const settingsPath = path.join(app.getPath('userData'), 'settings.json');
 
@@ -37,16 +38,19 @@ app.whenReady().then(async () => {
         else callback(false);
     });
 
-    try {
-        const eo = new ElectronOllama({ basePath: app.getPath('userData') });
-        if (!(await eo.isRunning())) await eo.serve('latest');
-    } catch (error) { console.error(error); }
+    // Initialize Ollama instance but DO NOT download yet
+    eo = new ElectronOllama({ basePath: app.getPath('userData') });
 
     setupIPC();
 
     if (!fs.existsSync(settingsPath)) {
         createSetupWindow();
     } else {
+        // If settings exist, just ensure it's running quickly
+        try {
+            if (!(await eo.isRunning())) await eo.serve('latest');
+        } catch (error) { console.error("Ollama boot error on existing install:", error); }
+
         createAppWindows();
     }
 });
@@ -66,7 +70,6 @@ function createSetupWindow() {
 }
 
 function createAppWindows() {
-    // FIX: Prevent multiple pets from spawning
     if (petWin) return;
 
     const primaryDisplay = screen.getPrimaryDisplay();
@@ -156,7 +159,7 @@ async function downloadOllamaModel(modelName, targetWin, progressChannel) {
                         targetWin.webContents.send(progressChannel, { status: 'Complete!', percent: 100 });
                     } else if (data.total && data.completed) {
                         const percent = Math.round((data.completed / data.total) * 100);
-                        targetWin.webContents.send(progressChannel, { status: `Downloading...`, percent: percent });
+                        targetWin.webContents.send(progressChannel, { status: `Downloading Model...`, percent: percent });
                     } else if (data.status) {
                         targetWin.webContents.send(progressChannel, { status: data.status, percent: 0 });
                     }
@@ -165,18 +168,41 @@ async function downloadOllamaModel(modelName, targetWin, progressChannel) {
         }
     } catch (err) {
         console.error('Download error:', err);
-        targetWin.webContents.send(progressChannel, { status: 'Failed to connect to Ollama.', percent: 0 });
+        targetWin.webContents.send(progressChannel, { status: 'Failed to download model.', percent: 0 });
     }
 }
 
 function setupIPC() {
-    ipcMain.on('start-initial-setup', (event, modelName) => {
+    ipcMain.on('start-initial-setup', async (event, modelName) => {
         const win = BrowserWindow.fromWebContents(event.sender);
-        downloadOllamaModel(modelName, win, 'initial-download-progress');
+
+        try {
+            // 1. Check if Ollama Engine is running. If not, download it.
+            if (!(await eo.isRunning())) {
+                win.webContents.send('initial-download-progress', { status: 'Downloading AI Engine (First time only)...', percent: 0 });
+
+                // Use downloadLog to show progress of the engine download
+                await eo.serve('latest', {
+                    downloadLog: (percent, message) => {
+                        win.webContents.send('initial-download-progress', {
+                            status: `Engine: ${message}`,
+                            percent: percent
+                        });
+                    }
+                });
+            }
+
+            // 2. Engine is running, now download the model
+            await downloadOllamaModel(modelName, win, 'initial-download-progress');
+
+        } catch (err) {
+            console.error('Setup failed:', err);
+            win.webContents.send('initial-download-progress', { status: 'Setup failed. Check internet.', percent: 0 });
+        }
     });
 
     ipcMain.on('finish-setup', () => {
-        if (petWin) return; // FIX: Prevent multiple triggers
+        if (petWin) return;
         if (setupWin) {
             setupWin.close();
             setupWin = null;
