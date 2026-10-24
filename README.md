@@ -149,3 +149,10 @@ MIT © Arafat Khan — see [LICENSE](LICENSE) for details.
   <a href="https://github.com/iamthearafatkhan/aurapet/issues"><b>Report an Issue</b></a> • 
   <a href="https://github.com/iamthearafatkhan/aurapet/releases/latest"><b>Download</b></a>
 </p>
+
+---
+<p align="center">
+  <a href="https://aurapet-app.netlify.app/"><b>Website</b></a> • 
+  <a href="https://github.com/iamthearafatkhan/aurapet/issues"><b>Report an Issue</b></a> • 
+  <a href="https://github.com/iamthearafatkhan/aurapet/releases/latest"><b>Download</b></a>
+</p>
